@@ -831,9 +831,12 @@ a:focus-visible,button:focus-visible,[tabindex]:focus-visible{
           <div class="settings-card">
             <h3>Data connectors</h3>
             <p class="card-sub">Independent sources this build is ready to accept.</p>
-            <div class="set-row"><div><div class="set-label">Exchange order books</div></div><span class="connector-badge"><span class="pulse"></span>Awaiting feed</span></div>
-            <div class="set-row"><div><div class="set-label">On-chain ledger data</div></div><span class="connector-badge"><span class="pulse"></span>Awaiting feed</span></div>
-            <div class="set-row"><div><div class="set-label">Derivatives / funding</div></div><span class="connector-badge"><span class="pulse"></span>Awaiting feed</span></div>
+            <div id="dataConnectorsList">
+              <div class="set-row"><div><div class="set-label">Network Activity</div></div><span class="connector-badge"><span class="pulse"></span>Checking…</span></div>
+              <div class="set-row"><div><div class="set-label">Escrow</div></div><span class="connector-badge"><span class="pulse"></span>Checking…</span></div>
+              <div class="set-row"><div><div class="set-label">Exchange order books</div></div><span class="connector-badge"><span class="pulse"></span>Awaiting feed</span></div>
+              <div class="set-row"><div><div class="set-label">Derivatives / funding</div></div><span class="connector-badge"><span class="pulse"></span>Awaiting feed</span></div>
+            </div>
           </div>
         </div>
       </section>
@@ -1191,7 +1194,7 @@ function computeVisibilityLayers(){
   const opaqueCorroborates = opaque.count>0 && Math.sign(opaque.evidence[0].normalizedValue) === Math.sign(inst.score-retail.score || 1);
   return { layers, divergence, direction, opaqueCorroborates };
 }
-const visibilityLayers = computeVisibilityLayers();
+let visibilityLayers = computeVisibilityLayers();
 
 /* ---------- Contradiction Engine ----------
    Actively searches for evidence that disagrees, and explains why
@@ -1269,7 +1272,7 @@ const ContradictionEngine = {
     return found;
   }
 };
-const contradictions = ContradictionEngine.scan();
+let contradictions = ContradictionEngine.scan();
 
 /* ---------- Confidence Engine ----------
    No single confidence number. Five independently visible
@@ -1293,7 +1296,7 @@ const ConfidenceEngine = {
     return { dataQuality, sourceReliability, signalAgreement, historicalMatch, signalFreshness, overall };
   }
 };
-const confidence = ConfidenceEngine.compute();
+let confidence = ConfidenceEngine.compute();
 
 /* ---------- Market Fingerprint ---------- */
 const MarketFingerprint = {
@@ -1316,9 +1319,9 @@ const MarketFingerprint = {
     };
   }
 };
-const fingerprint = MarketFingerprint.compute();
-const fingerprintAvgLean = Math.round(EvidenceStore.reduce((s,e)=>s+e.normalizedValue,0)/EvidenceStore.length);
-const fingerprintRegimeLabel = fingerprintAvgLean>10 ? 'Accumulation-leaning' : fingerprintAvgLean<-10 ? 'Distribution-leaning' : 'Balanced / Mixed';
+let fingerprint = MarketFingerprint.compute();
+let fingerprintAvgLean = Math.round(EvidenceStore.reduce((s,e)=>s+e.normalizedValue,0)/EvidenceStore.length);
+let fingerprintRegimeLabel = fingerprintAvgLean>10 ? 'Accumulation-leaning' : fingerprintAvgLean<-10 ? 'Distribution-leaning' : 'Balanced / Mixed';
 
 /* ---------- Timeline Engine ----------
    Every ingested signal becomes a timestamped event so the
@@ -1334,7 +1337,7 @@ const TimelineEngine = {
     return events.sort((a,b)=> new Date(b.time)-new Date(a.time));
   }
 };
-const timeline = TimelineEngine.build();
+let timeline = TimelineEngine.build();
 
 /* ---------- AI Summary Engine ----------
    Grounded, template-driven synthesis — explains reasoning,
@@ -1356,7 +1359,7 @@ const AISummaryEngine = {
     return s;
   }
 };
-const aiSummaryText = AISummaryEngine.generate();
+let aiSummaryText = AISummaryEngine.generate();
 
 /* ================================================================
    EXPLAINABILITY ENGINE
@@ -1491,8 +1494,14 @@ const AuditLog = {
 
 /* ---------- Orchestrator: everything above wired together ---------- */
 const EvidenceEngine = {
-  evidence: EvidenceStore, contradictions, confidence, fingerprint, timeline, visibilityLayers,
-  summary: aiSummaryText, regimeLabel: fingerprintRegimeLabel,
+  evidence: EvidenceStore,
+  get contradictions(){ return contradictions; },
+  get confidence(){ return confidence; },
+  get fingerprint(){ return fingerprint; },
+  get timeline(){ return timeline; },
+  get visibilityLayers(){ return visibilityLayers; },
+  get summary(){ return aiSummaryText; },
+  get regimeLabel(){ return fingerprintRegimeLabel; },
   byCategory(id){ return EvidenceStore.filter(e=>e.category===id); },
   find(id){ return EvidenceStore.find(e=>e.id===id || e.category===id); }
 };
@@ -2548,6 +2557,166 @@ const ContradictionViewer = {
   }
 };
 ContradictionViewer.render();
+
+/* ================================================================
+   RE-RUNNABLE PIPELINE
+   Everything from WeightingEngine through the AI summary was
+   originally a one-shot sequence. Live data has to be able to
+   arrive asynchronously (a fetch takes time), mutate the evidence
+   it affects, and have the *entire* platform recompute and
+   re-render from that — not just patch one number in place.
+   ================================================================ */
+function runPipeline(){
+  WeightingEngine.applyAll();
+  visibilityLayers = computeVisibilityLayers();
+  contradictions = ContradictionEngine.scan();
+  confidence = ConfidenceEngine.compute();
+  fingerprint = MarketFingerprint.compute();
+  fingerprintAvgLean = Math.round(EvidenceStore.reduce((s,e)=>s+e.normalizedValue,0)/EvidenceStore.length);
+  fingerprintRegimeLabel = fingerprintAvgLean>10 ? 'Accumulation-leaning' : fingerprintAvgLean<-10 ? 'Distribution-leaning' : 'Balanced / Mixed';
+  timeline = TimelineEngine.build();
+  aiSummaryText = AISummaryEngine.generate();
+}
+function rerenderAll(){
+  WidgetRegistry.modules = buildWidgetModules();
+  WidgetRegistry.render();
+  StoryEngine.render();
+  if(document.getElementById('view-contradictions').classList.contains('active')) ContradictionViewer.render();
+  const auditPanel = document.getElementById('auditPanel');
+  if(auditPanel) auditPanel.dataset.rendered = '';
+  renderConnectorStatus();
+}
+function renderConnectorStatus(){
+  const netEv = EvidenceEngine.find('networkActivity');
+  const escEv = EvidenceEngine.find('escrow');
+  const rowFor = (label, ev) => {
+    if(ev._liveFetchFailed === undefined) return `<div class="set-row"><div><div class="set-label">${label}</div></div><span class="connector-badge"><span class="pulse"></span>Checking…</span></div>`;
+    if(ev._liveFetchFailed){
+      return `<div class="set-row"><div><div class="set-label">${label}</div><div class="set-desc">${ev._liveFetchError}</div></div><span class="connector-badge"><span class="pulse"></span>Demo value</span></div>`;
+    }
+    return `<div class="set-row"><div><div class="set-label">${label}</div><div class="set-desc">${ev.source}</div></div><span class="connector-badge" style="border-color:var(--sem-support);color:var(--sem-support);"><span class="pulse" style="background:var(--sem-support);"></span>Live</span></div>`;
+  };
+  document.getElementById('dataConnectorsList').innerHTML =
+    rowFor('Network Activity', netEv) +
+    rowFor('Escrow', escEv) +
+    `<div class="set-row"><div><div class="set-label">Exchange order books</div></div><span class="connector-badge"><span class="pulse"></span>Awaiting feed</span></div>` +
+    `<div class="set-row"><div><div class="set-label">Derivatives / funding</div></div><span class="connector-badge"><span class="pulse"></span>Awaiting feed</span></div>`;
+}
+
+/* ================================================================
+   LIVE DATA CONNECTOR — the first real feed
+   Calls the public XRPSCAN API (docs.xrpscan.com) for live XRP
+   Ledger data. No API key, no server of ours involved — this runs
+   entirely in the browser after the page loads.
+
+   HONESTY NOTES, read before relying on this:
+   1. This requires being served over http(s) — GitHub Pages works,
+      opening the file directly (file://) will likely be blocked by
+      the browser's CORS policy, since XRPSCAN can't grant "null"
+      origin access. If you see "(demo — live fetch unavailable)"
+      on Network Activity, that's almost certainly why.
+   2. Escrow tracking needs real, verified account addresses. Rather
+      than guess one from memory and risk silently feeding this
+      platform a wrong wallet, ESCROW_ADDRESSES ships empty. Look up
+      a handful of the "Ripple" labelled escrow accounts at
+      xrpscan.com (search "Ripple (1)", "Ripple (2)", etc.) and paste
+      the addresses in below to bring that category live too.
+   3. On any failure — network, CORS, rate limit, timeout — the
+      evidence quietly falls back to the demo reading and says so.
+      It never pretends a failed fetch succeeded.
+   ================================================================ */
+const ESCROW_ADDRESSES = [
+  // e.g. 'rXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+];
+
+const LiveDataConnector = {
+  async fetchJSON(url, timeoutMs=6000){
+    const ctrl = new AbortController();
+    const t = setTimeout(()=>ctrl.abort(), timeoutMs);
+    try{
+      const res = await fetch(url, {signal: ctrl.signal});
+      clearTimeout(t);
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      return await res.json();
+    }catch(err){
+      clearTimeout(t);
+      throw err;
+    }
+  },
+
+  async connectNetworkActivity(){
+    const ev = EvidenceEngine.find('networkActivity');
+    try{
+      const info = await this.fetchJSON('https://api.xrpscan.com/api/v1/network/server-info');
+      const state = info?.info?.validated_ledger || info?.result?.info?.validated_ledger;
+      if(!state || !state.seq) throw new Error('Unexpected response shape');
+      const ledgerAge = Math.max(0, Date.now()/1000 - (state.age!=null ? Date.now()/1000 - state.age : Date.now()/1000));
+      ev.rawValue = `Ledger #${state.seq.toLocaleString()} · ${state.age!=null ? state.age+'s old' : 'age unknown'}`;
+      ev.source = 'XRPSCAN public API (live)';
+      ev.calculationMethod = 'Directly reads the current validated ledger sequence and its age from a public rippled server — the ledger closing on schedule is itself the evidence of a live, healthy network.';
+      ev.reliability = 98;
+      ev.status = 'active';
+      ev.timestamp = new Date().toISOString();
+      ev.lastVerification = ev.timestamp;
+      ev.normalizedValue = state.age!=null && state.age <= 8 ? 14 : 4; // ledger closing on its normal ~3-5s cadence vs. lagging
+      ev.trend = 'flat';
+      ev._liveFetchFailed = false;
+      return true;
+    }catch(err){
+      ev._liveFetchFailed = true;
+      ev._liveFetchError = err.message || String(err);
+      return false;
+    }
+  },
+
+  async connectEscrow(){
+    const ev = EvidenceEngine.find('escrow');
+    if(!ESCROW_ADDRESSES.length){
+      ev._liveFetchFailed = true;
+      ev._liveFetchError = 'No verified escrow addresses configured yet — see ESCROW_ADDRESSES in the source.';
+      return false;
+    }
+    try{
+      let total = 0;
+      for(const addr of ESCROW_ADDRESSES){
+        const info = await this.fetchJSON(`https://api.xrpscan.com/api/v1/account/${addr}`);
+        total += parseFloat(info.xrpBalance || 0);
+      }
+      ev.rawValue = `${(total/1e9).toFixed(2)}B XRP across ${ESCROW_ADDRESSES.length} tracked escrow wallet(s)`;
+      ev.source = 'XRPSCAN public API (live) — verified escrow addresses';
+      ev.reliability = 99;
+      ev.status = 'active';
+      ev.timestamp = new Date().toISOString();
+      ev.lastVerification = ev.timestamp;
+      ev._liveFetchFailed = false;
+      return true;
+    }catch(err){
+      ev._liveFetchFailed = true;
+      ev._liveFetchError = err.message || String(err);
+      return false;
+    }
+  },
+
+  async connectAll(){
+    const results = await Promise.allSettled([
+      this.connectNetworkActivity(),
+      this.connectEscrow(),
+    ]);
+    const liveCount = results.filter(r=>r.status==='fulfilled' && r.value===true).length;
+    runPipeline();
+    rerenderAll();
+    NotificationCenter.items.unshift({
+      type: liveCount>0 ? 'good' : 'info',
+      text: liveCount>0
+        ? `Live data connected: ${liveCount} evidence categor${liveCount>1?'ies':'y'} now reading from the XRP Ledger directly.`
+        : `Live data connector ran but couldn't reach the XRPL feed (likely CORS, since this file isn't served over https) — showing demo values.`,
+      time:'just now'
+    });
+    NotificationCenter.render();
+  }
+};
+LiveDataConnector.connectAll();
+
 </script>
 </body>
 </html>
