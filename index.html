@@ -809,6 +809,7 @@ registerCategory('etfFlows',           'ETF Flows',               82);
 registerCategory('socialSentiment',    'Social Sentiment',        55);
 registerCategory('aiInterpretation',   'AI Interpretation',       null, 'Reliability is variable — scored per instance, never assumed.');
 registerCategory('futureDataSources',  'Future Data Sources',     null, 'Open connector — no signals registered yet.');
+registerCategory('otcInference',       'OTC / Block Settlement',  null, 'Never directly observed — derived from the gap between reserve movement and visible order-book volume. Inherently the lowest-confidence category by design.');
 
 /* ---------- Reliability & Historical Context templates ----------
    Used to auto-populate the transparency fields every evidence
@@ -835,7 +836,8 @@ const CALC_METHOD = {
   etfFlows:'Would sum daily creation/redemption units once a feed is connected; no active instrument to read yet.',
   socialSentiment:'Sentiment model applied to aggregated public posts mentioning the asset; authorship unverified.',
   aiInterpretation:'Pattern-similarity score between the current evidence shape and stored historical evidence shapes.',
-  futureDataSources:'Reserved for connectors not yet built.'
+  futureDataSources:'Reserved for connectors not yet built.',
+  otcInference:'Derived, not observed: (magnitude of exchange reserve outflow) minus (visible order-book volume that could plausibly explain it). The remainder is attributed to settlement that never touched a public order book.',
 };
 const ASSUMPTIONS = {
   exchangeActivity:'Assumes exchange wallet labels are current and volume reflects genuine trading, not wash activity.',
@@ -858,7 +860,8 @@ const ASSUMPTIONS = {
   etfFlows:'No assumptions currently applied — category has no active data.',
   socialSentiment:'Assumes sampled posts are not dominated by coordinated or bot activity.',
   aiInterpretation:'Assumes the historical regime library is representative; small library size limits precision.',
-  futureDataSources:'No assumptions — connector not yet active.'
+  futureDataSources:'No assumptions — connector not yet active.',
+  otcInference:'Assumes the visible order-book venues used for comparison are representative of total retail-accessible liquidity; if they understate it, this inference overstates the opaque portion.',
 };
 function reliabilityTier(rel){
   if(rel==null) return {errorMargin:'variable, instance-dependent', weaknesses:'Interpretive or model-derived — reliability is judged per instance, never assumed fixed.'};
@@ -868,6 +871,24 @@ function reliabilityTier(rel){
   if(rel>=55) return {errorMargin:'±10–15%', weaknesses:'Model- or sentiment-derived; prone to noise, sampling bias, and manipulation.'};
   return {errorMargin:'±15%+', weaknesses:'Low-reliability tier — treat as directional colour only, not a standalone basis for a conclusion.'};
 }
+
+/* ---------- Market Visibility Layer classification ----------
+   Every evidence object is produced by a population that either
+   trades where anyone can watch, trades through institutional-only
+   but still publicly-reported venues, or never shows up directly
+   at all. Defaulted per category, overridable per evidence instance
+   (since a category like "open interest" can have both a retail-perp
+   reading and a CME reading, which belong in different layers). */
+const CATEGORY_LAYER_DEFAULT = {
+  exchangeActivity:'Directly Observable', whaleMovement:'Directly Observable', walletCreation:'Directly Observable',
+  exchangeReserves:'Directly Observable', stablecoinMovement:'Directly Observable', orderBooks:'Directly Observable',
+  liquidity:'Directly Observable', fundingRates:'Directly Observable', openInterest:'Directly Observable',
+  liquidations:'Directly Observable', escrow:'Directly Observable', dexActivity:'Directly Observable',
+  crossChainMovement:'Directly Observable', developerActivity:'Directly Observable', networkActivity:'Directly Observable',
+  news:'Directly Observable', macroEvents:'Directly Observable', socialSentiment:'Directly Observable',
+  etfFlows:'Institutionally Observable',
+  aiInterpretation:'Inferred / Opaque', otcInference:'Inferred / Opaque', futureDataSources:'Directly Observable',
+};
 
 /* ---------- Evidence Object factory + store ---------- */
 const EvidenceStore = [];
@@ -890,10 +911,11 @@ function ingest(categoryId, cfg){
     reliability,
     historicalComparison: cfg.historicalComparison || 'No directly comparable prior instance flagged.',
     status: cfg.status || 'active',
+    visibilityLayer: cfg.layer || CATEGORY_LAYER_DEFAULT[categoryId] || 'Directly Observable',
     weight: 0, confidenceContribution: 0, aiExplanation: '',
     // Reliability transparency
-    calculationMethod: CALC_METHOD[categoryId] || 'Method not yet documented for this category.',
-    assumptions: ASSUMPTIONS[categoryId] || 'No assumptions documented yet.',
+    calculationMethod: cfg.calculationMethod || CALC_METHOD[categoryId] || 'Method not yet documented for this category.',
+    assumptions: cfg.assumptions || ASSUMPTIONS[categoryId] || 'No assumptions documented yet.',
     knownWeaknesses: tier.weaknesses,
     errorMargin: tier.errorMargin,
     reliabilityWhy: `Set at ${reliability}% because ${tier.weaknesses.charAt(0).toLowerCase()+tier.weaknesses.slice(1)}`,
@@ -917,13 +939,14 @@ function ingest(categoryId, cfg){
 ingest('exchangeActivity',   {signal:'Retail Order Flow (spot)', source:'Known exchange wallet', raw:'Net sell 68% of volume', normalized:-34, trend:'down', ageMinutes:12});
 ingest('whaleMovement',      {signal:'Whale Wallet Net Flow', source:'Blockchain transaction', raw:'+184 net accumulating wallets', normalized:52, trend:'up', ageMinutes:8});
 ingest('walletCreation',     {signal:'New Wallet Creation Rate', source:'Blockchain transaction', raw:'+3.1% (7d)', normalized:7, trend:'up', ageMinutes:180});
-ingest('exchangeReserves',   {signal:'Aggregate Exchange Reserves', source:'Exchange reserve estimate', raw:'-142.6M XRP (7d)', normalized:-46, trend:'down', ageMinutes:45});
+const reservesEv = ingest('exchangeReserves',   {signal:'Aggregate Exchange Reserves', source:'Exchange reserve estimate', raw:'-142.6M XRP (7d)', normalized:-46, trend:'down', ageMinutes:45});
 ingest('stablecoinMovement', {signal:'Stablecoin Exchange Inflows', source:'Blockchain transaction', raw:'+58.2M USDT/USDC (7d)', normalized:44, trend:'up', ageMinutes:20});
-ingest('orderBooks',         {signal:'Bid/Ask Depth Imbalance', source:'Order book estimate', raw:'1.18x bid-heavy', normalized:18, trend:'flat', ageMinutes:5});
+const orderbookEv = ingest('orderBooks',         {signal:'Bid/Ask Depth Imbalance', source:'Order book estimate', raw:'1.18x bid-heavy', normalized:18, trend:'flat', ageMinutes:5});
 ingest('liquidity',          {signal:'Aggregate Market Depth (±2%)', source:'Order book estimate', raw:'$26.4M', normalized:10, trend:'flat', ageMinutes:5});
-ingest('fundingRates',       {signal:'Perpetual Funding Rate', source:'Derivatives exchange API', raw:'+0.006%/8h', normalized:6, trend:'flat', ageMinutes:15});
-ingest('openInterest',       {signal:'Open Interest (perps)', source:'Derivatives exchange API', raw:'+4.2% (7d)', normalized:12, trend:'up', ageMinutes:15});
-ingest('liquidations',       {signal:'Liquidation Volume, long-side (24h)', source:'Derivatives exchange API', raw:'$4.1M long-side', normalized:-14, trend:'down', ageMinutes:33});
+ingest('fundingRates',       {signal:'Retail Perpetual Funding Rate', source:'Retail perpetual venue API', raw:'+0.006%/8h', normalized:6, trend:'flat', ageMinutes:15});
+ingest('openInterest',       {signal:'Retail Perpetual Open Interest', source:'Retail perpetual venue API', raw:'+4.2% (7d)', normalized:12, trend:'up', ageMinutes:15});
+ingest('openInterest',       {signal:'CME XRP Futures Open Interest', source:'CME Group (regulated, publicly reported)', raw:'$1.02B open interest, $62.9B cumulative notional', normalized:34, trend:'up', reliability:93, layer:'Institutionally Observable', ageMinutes:60});
+ingest('liquidations',       {signal:'Liquidation Volume, long-side (24h)', source:'Retail perpetual venue API', raw:'$4.1M long-side', normalized:-14, trend:'down', ageMinutes:33});
 ingest('escrow',             {signal:'Ripple Escrow Release', source:'Known Ripple escrow', raw:'1.0B released · 0.85B re-locked', normalized:4, trend:'flat', ageMinutes:600});
 ingest('dexActivity',        {signal:'DEX Volume Share', source:'Blockchain transaction', raw:'12.4% of total volume', normalized:6, trend:'up', ageMinutes:60});
 ingest('crossChainMovement', {signal:'Bridge Inflow (XRPL EVM sidechain)', source:'Bridge contract log', raw:'+$2.1M (7d)', normalized:5, trend:'up', ageMinutes:240});
@@ -931,10 +954,20 @@ ingest('developerActivity',  {signal:'GitHub Commit Velocity', source:'GitHub AP
 ingest('networkActivity',    {signal:'Active Addresses (7d avg)', source:'Blockchain transaction', raw:'+6.4%', normalized:14, trend:'up', ageMinutes:30});
 ingest('news',               {signal:'News Sentiment Aggregate', source:'News aggregator', raw:'Mixed, mildly positive', normalized:8, trend:'flat', ageMinutes:90});
 ingest('macroEvents',        {signal:'Risk-Appetite Proxy (DXY)', source:'Macro data feed', raw:'DXY -0.4% (7d)', normalized:5, trend:'flat', ageMinutes:300});
-ingest('etfFlows',           {signal:'Spot ETF Flow Estimate', source:'Fund flow estimate', raw:'No active XRP spot ETF tracked', normalized:0, trend:'flat', ageMinutes:1440, status:'pending'});
+ingest('etfFlows',           {signal:'Spot ETF Net Flow (Bitwise/21Shares/Canary)', source:'Issuer-reported creation/redemption', raw:'+$14.2M net inflow (5d avg)', normalized:30, trend:'up', reliability:82, layer:'Institutionally Observable', ageMinutes:20});
 ingest('socialSentiment',    {signal:'Social Sentiment Index', source:'Social sentiment model', raw:'54 / 100, neutral-bearish', normalized:-6, trend:'flat', ageMinutes:25});
 ingest('aiInterpretation',   {signal:'Cross-Signal Pattern Match', source:'AI interpretation (internal)', raw:'Partial match to historical accumulation regime', normalized:20, trend:'up', reliability:62, ageMinutes:10});
-// price sits outside the pluggable category list — it's the reference line every other category is read against, not a submitted signal
+// OTC / Block Settlement — the genuinely opaque layer. Never observed directly;
+// derived from the gap between reserve outflow and what visible order-book
+// volume could plausibly explain.
+const otcGap = clamp(Math.round(Math.abs(reservesEv.normalizedValue) - Math.abs(orderbookEv.normalizedValue)*1.6), 0, 55);
+ingest('otcInference', {
+  signal:'Inferred OTC / Block Settlement Volume', source:'Derived — reserve vs. order-book volume gap',
+  raw:`~${otcGap} pts of reserve movement unexplained by visible order-book volume`,
+  normalized: reservesEv.trend==='down' ? otcGap : -otcGap, trend: reservesEv.trend==='down'?'up':'down',
+  reliability:45, layer:'Inferred / Opaque', ageMinutes:50,
+  historicalComparison:'This gap has no independent confirmation — treat as a hypothesis the other two layers can support or undercut, not a standalone conclusion.'
+});
 const PriceEvidence = ingest('futureDataSources', {signal:'XRP Spot Price (24h)', source:'Aggregated exchange feed', raw:'-3.8%', normalized:-38, trend:'down', reliability:97, ageMinutes:2});
 PriceEvidence.categoryLabel = 'Market Price (reference)';
 
@@ -977,6 +1010,32 @@ const WeightingEngine = {
   }
 };
 WeightingEngine.applyAll();
+
+/* ---------- Market Visibility Layer ----------
+   Every evidence object belongs to one of three populations: seen by
+   anyone (Directly Observable), seen only through institutional-access
+   but still publicly-reported venues (Institutionally Observable), or
+   never seen directly at all (Inferred / Opaque). Divergence between
+   the first two is measured explicitly — it's the clearest evidence
+   that retail and institutional flow currently disagree, not a guess
+   about which one is "right."*/
+function computeVisibilityLayers(){
+  const LAYERS = ['Directly Observable','Institutionally Observable','Inferred / Opaque'];
+  const layers = {};
+  LAYERS.forEach(layer=>{
+    const evs = EvidenceStore.filter(e=>e.visibilityLayer===layer);
+    if(!evs.length){ layers[layer] = {label:layer, score:50, confidence:0, count:0, evidence:[]}; return; }
+    const score = Math.round(50 + evs.reduce((s,e)=>s+e.normalizedValue,0)/evs.length/2);
+    const conf = Math.round(evs.reduce((s,e)=>s+e.weight,0)/evs.length);
+    layers[layer] = {label:layer, score, confidence:conf, count:evs.length, evidence:evs};
+  });
+  const retail = layers['Directly Observable'], inst = layers['Institutionally Observable'], opaque = layers['Inferred / Opaque'];
+  const divergence = Math.abs(retail.score - inst.score);
+  const direction = inst.score > retail.score ? 'institutional-leans-more-constructive' : retail.score > inst.score ? 'retail-leans-more-constructive' : 'aligned';
+  const opaqueCorroborates = opaque.count>0 && Math.sign(opaque.evidence[0].normalizedValue) === Math.sign(inst.score-retail.score || 1);
+  return { layers, divergence, direction, opaqueCorroborates };
+}
+const visibilityLayers = computeVisibilityLayers();
 
 /* ---------- Contradiction Engine ----------
    Actively searches for evidence that disagrees, and explains why
@@ -1026,6 +1085,29 @@ const ContradictionEngine = {
         historicalExample:'Funding/liquidation splits like this typically resolve within 24–48 hours as funding catches down to reflect the flush, rather than persisting for extended periods.',
         unknownFactors:['Whether liquidations are concentrated on a single venue or spread across the tracked set.', 'Whether the deleveraged capital re-enters long or stays sidelined.'],
         strength: Math.round((funding.weight+liq.weight)/2)
+      });
+    }
+
+    if(visibilityLayers.divergence >= 12){
+      const retail = visibilityLayers.layers['Directly Observable'], inst = visibilityLayers.layers['Institutionally Observable'];
+      const instLeads = visibilityLayers.direction === 'institutional-leans-more-constructive';
+      found.push({
+        id:'ctd-03',
+        title:'Retail layer and institutional layer disagree',
+        involved:[...retail.evidence.slice(0,2).map(e=>e.signalName), ...inst.evidence.slice(0,2).map(e=>e.signalName)],
+        description:`Directly observable, retail-facing evidence reads ${retail.score}/100 while institutionally observable evidence (CME futures, spot ETF flow) reads ${inst.score}/100 — a ${visibilityLayers.divergence}-point gap between the two populations.`,
+        explanation: instLeads
+          ? 'Institutional-access venues are reading more constructively than retail-facing ones. Retail and institutional capital genuinely trade through different venues and rarely move in lockstep — this gap is exactly what you\'d expect if larger capital is positioning independently of, or ahead of, retail sentiment.'
+          : 'Retail-facing venues are reading more constructively than institutional-access venues. This can mean retail enthusiasm is running ahead of institutional confirmation, or that institutional capital is deliberately staying on the sidelines despite retail optimism.',
+        implication: `This does not say who is "right" — only that the two populations currently disagree.${visibilityLayers.opaqueCorroborates ? ' The Inferred/Opaque layer (OTC settlement gap) points the same direction, which is weak corroboration, not confirmation.' : ''}`,
+        possibleInterpretations:[
+          instLeads ? 'Institutional capital is accumulating ahead of a retail sentiment shift.' : 'Retail is front-running a confirmation that institutional flow hasn\'t validated yet.',
+          'The gap reflects different time horizons — institutional positioning (CME, ETF) often reflects weeks, retail order flow reflects hours.',
+          'One layer\'s evidence is simply lower quality this cycle — check each layer\'s confidence score before weighting the gap itself too heavily.'
+        ],
+        historicalExample:'Gaps of this size between retail order flow and CME/ETF-reported positioning have historically narrowed within 1–3 weeks, sometimes via retail catching up and sometimes via institutional flow reversing — this is not predictive of which.',
+        unknownFactors:['Whether CME/ETF positioning reflects new capital or existing holders rotating structure.', 'Whether retail order flow is representative or concentrated in a few large accounts.'],
+        strength: Math.round((retail.confidence+inst.confidence)/2)
       });
     }
     return found;
@@ -1240,13 +1322,20 @@ const AuditLog = {
         reasoning:fingerprint.institutionBehaviour.explanation,
         finalScore:fingerprint.institutionBehaviour.score+'/100'
       },
+      {
+        title:'Market Visibility Layer — Divergence',
+        inputs:`${visibilityLayers.layers['Directly Observable'].count} Directly Observable + ${visibilityLayers.layers['Institutionally Observable'].count} Institutionally Observable evidence objects`,
+        weighting:'score per layer = 50 + (mean normalized value in that layer)/2; divergence = |Directly Observable score − Institutionally Observable score|',
+        reasoning:`Retail layer scored ${visibilityLayers.layers['Directly Observable'].score}/100, institutional layer scored ${visibilityLayers.layers['Institutionally Observable'].score}/100. ${visibilityLayers.divergence>=12?'Gap exceeded the 12-point threshold, so it was passed to the Contradiction Engine as ctd-03.':'Gap stayed under the 12-point threshold, so no contradiction was raised.'}`,
+        finalScore:visibilityLayers.divergence+' pt gap'
+      },
     ];
   }
 };
 
 /* ---------- Orchestrator: everything above wired together ---------- */
 const EvidenceEngine = {
-  evidence: EvidenceStore, contradictions, confidence, fingerprint, timeline,
+  evidence: EvidenceStore, contradictions, confidence, fingerprint, timeline, visibilityLayers,
   summary: aiSummaryText, regimeLabel: fingerprintRegimeLabel,
   byCategory(id){ return EvidenceStore.filter(e=>e.category===id); },
   find(id){ return EvidenceStore.find(e=>e.id===id || e.category===id); }
@@ -1436,6 +1525,20 @@ function buildWidgetModules(){
       icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3a9 9 0 0 0-9 9M4 15l4-4M12 21v-3"/><path d="M17 8l-2.5 2.5"/></svg>',
       explain:`Never a single number without a reason. This figure can never exceed the platform's own source-reliability average (${confidence.sourceReliability}%) — see expand view for the full 5-dimension breakdown.`,
       connector:'Meta-aggregates data quality, source reliability, signal agreement, historical match, and freshness'
+    },
+    {
+      id:'market-visibility-layer', title:'Market Visibility Layer', tone: visibilityLayers.divergence>=12?'warn':'good', span2:true,
+      desc:'Every signal classified as Directly Observable, Institutionally Observable, or Inferred / Opaque — and the gap between them.',
+      metric:visibilityLayers.divergence+' pts', metricLabel:'Retail ↔ Institutional divergence',
+      delta: visibilityLayers.direction==='aligned' ? 'aligned' : (visibilityLayers.direction==='institutional-leans-more-constructive'?'institutions lead':'retail leads'),
+      deltaDir: visibilityLayers.divergence>=12?'down':'flat',
+      confidence:Math.round((visibilityLayers.layers['Directly Observable'].confidence+visibilityLayers.layers['Institutionally Observable'].confidence)/2),
+      reliability:Math.round(EvidenceStore.filter(e=>e.visibilityLayer!=='Inferred / Opaque').reduce((s,e)=>s+e.reliability,0)/EvidenceStore.filter(e=>e.visibilityLayer!=='Inferred / Opaque').length),
+      icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
+      explain: visibilityLayers.divergence>=12
+        ? `A ${visibilityLayers.divergence}-point gap between retail-visible evidence and institutionally-visible evidence (CME futures, spot ETF flow) is currently flagged in the Contradiction Viewer — the two populations disagree right now, and this does not say which one is correct.`
+        : `Retail-visible and institutionally-visible evidence are currently reading within ${visibilityLayers.divergence} points of each other — no meaningful population-level disagreement flagged.`,
+      connector:'Directly Observable · Institutionally Observable (CME, ETF) · Inferred / Opaque (OTC gap)'
     },
   ];
 }
@@ -1661,6 +1764,22 @@ const ModalController = {
       html += `<div class="modal-section"><h4>Fingerprint categories</h4>` +
         Object.values(fingerprint).map(f=>ioRow(f.label, `${f.score}/100 · ${f.confidence}% conf · ${f.trend}`)).join('') +
         `</div>`;
+    }
+
+    if(m.id==='market-visibility-layer'){
+      html += `<div class="modal-section"><h4>The three layers</h4>` +
+        Object.values(visibilityLayers.layers).map(l=>`
+          <div class="ledger">
+            <div class="ledger-row"><span class="ledger-label">${l.label}</span><span class="ledger-value">${l.score}/100 · ${l.count} signal${l.count===1?'':'s'}</span></div>
+            <div class="ledger-track">${seg5(l.confidence,'accent')}</div>
+          </div>`).join('') +
+        `<div class="explain-inner" style="padding:8px 0 0;"><b>Divergence: ${visibilityLayers.divergence} points</b> between Directly Observable and Institutionally Observable evidence.</div>` +
+        `</div>`;
+      html += `<div class="modal-section"><h4>Evidence by layer</h4>` +
+        Object.values(visibilityLayers.layers).map(l => `
+          <p style="font-size:11px;color:var(--text-2);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin:10px 0 4px;">${l.label}</p>
+          ${l.evidence.length ? l.evidence.map(e=>ioRow(e.signalName, `${e.normalizedValue>=0?'+':''}${e.normalizedValue} · ${e.reliability}% rel`)).join('') : '<div class="explain-inner" style="padding:0;">No evidence currently classified here.</div>'}
+        `).join('') + `</div>`;
     }
 
     if(m.id==='market-timeline'){
