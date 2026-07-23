@@ -309,6 +309,43 @@ a:focus-visible,button:focus-visible,[tabindex]:focus-visible{
 .skel-block{height:44px;}
 
 /* ============================================================
+   HUMAN-FIRST INTELLIGENCE — Tell Me / Show Me / Prove It
+   ============================================================ */
+
+/* Dashboard-top narrative: Today's Market Story, One Thing, Weather */
+.story-card{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius-l);padding:20px 24px;margin-bottom:14px;}
+.story-card h2{font-size:13.5px;margin:0 0 10px;display:flex;align-items:center;gap:8px;color:var(--text-0);}
+.story-card h2 svg{width:16px;height:16px;color:var(--accent);}
+.story-card p{font-size:13.5px;line-height:1.7;color:var(--text-0);margin:0;}
+.one-thing-card{background:var(--accent-wash);border:1px solid var(--accent-dim);border-left:3px solid var(--accent);border-radius:var(--radius-l);padding:16px 22px;margin-bottom:14px;}
+.one-thing-card .otc-label{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);font-weight:700;margin-bottom:8px;display:block;}
+.one-thing-card p{margin:0;font-size:13.5px;line-height:1.6;color:var(--text-0);}
+.story-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
+@media(max-width:900px){.story-row{grid-template-columns:1fr;}}
+.weather-pill{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.weather-pill .wemoji{font-size:22px;}
+.weather-pill .wlabel{font-size:13.5px;font-weight:700;color:var(--text-0);}
+
+/* Widget card — Tell Me / Show Me content */
+.tell-me{font-size:14px;font-weight:700;line-height:1.5;color:var(--text-0);margin:2px 0 3px;}
+.tell-question{font-size:10.5px;color:var(--text-2);font-style:italic;margin:0 0 10px;}
+.status-pill{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;padding:4px 10px;
+  border-radius:999px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px;}
+.phrase-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--text-1);padding:3px 0;}
+.phrase-row b{color:var(--text-0);font-weight:600;}
+.phrase-row .num{font-family:var(--font-data);color:var(--text-2);font-size:10.5px;flex-shrink:0;}
+.since-line{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--text-2);margin-top:9px;padding-top:9px;border-top:1px solid var(--line-soft);}
+.since-line .dir-up{color:var(--good);font-weight:700;} .since-line .dir-down{color:var(--bad);font-weight:700;} .since-line .dir-flat{color:var(--text-2);font-weight:700;}
+
+/* Crypto Translator — tap/hover glossary terms */
+.gterm{border-bottom:1px dotted var(--text-2);cursor:help;}
+.glossary-tip{position:fixed;z-index:80;background:var(--bg-3);border:1px solid var(--line);border-radius:8px;
+  padding:9px 12px;font-size:11.5px;line-height:1.5;color:var(--text-0);max-width:230px;
+  box-shadow:0 14px 30px rgba(0,0,0,.45);display:none;}
+.glossary-tip.show{display:block;}
+.glossary-tip b{display:block;color:var(--accent);font-size:10px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;}
+
+/* ============================================================
    AI ENGINE VIEW — architecture placeholder, no inference wired
    ============================================================ */
 .pipeline{
@@ -560,6 +597,14 @@ a:focus-visible,button:focus-visible,[tabindex]:focus-visible{
             </button>
           </div>
         </div>
+
+        <div id="marketStoryCard"></div>
+        <div id="oneThingCard"></div>
+        <div class="story-row">
+          <div id="weatherCard" class="story-card"></div>
+          <div id="whyTodayCard" class="story-card"></div>
+        </div>
+
         <div class="widget-grid" id="widgetGrid"></div>
       </section>
 
@@ -689,6 +734,8 @@ a:focus-visible,button:focus-visible,[tabindex]:focus-visible{
 </div>
 
 <!-- Widget expand modal -->
+<div class="glossary-tip" id="glossaryTip"></div>
+
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal" id="modalContent"></div>
 </div>
@@ -1341,6 +1388,128 @@ const EvidenceEngine = {
   find(id){ return EvidenceStore.find(e=>e.id===id || e.category===id); }
 };
 
+/* ================================================================
+   HUMAN-FIRST INTELLIGENCE LAYER
+   Tell me → Show me → Prove it. Everything the engines above compute
+   still exists — nothing is removed — it's just translated into
+   plain meaning first, with the numbers demoted to supporting detail.
+   ================================================================ */
+
+/* ---------- Crypto Translator — tap any underlined term for a plain-English definition ---------- */
+const GLOSSARY = {
+  'Funding Rate':'The cost traders pay to keep leveraged positions open.',
+  'Order Book':'A live list of buy and sell orders waiting to be filled.',
+  'Exchange Reserves':'The amount of XRP currently held on exchanges.',
+  'Open Interest':'The total number of futures contracts currently open.',
+  'ETF Flow':'The amount of money entering or leaving XRP ETFs.',
+  'Whale':'A wallet holding a large enough amount to move the market.',
+  'Whales':'Wallets holding a large enough amount to move the market.',
+  'Liquidity':'How easily an asset can be bought or sold without moving its price.',
+  'Escrow':'XRP locked in a smart contract and released on a fixed schedule.',
+  'DEX':'A decentralized exchange — trading directly on the blockchain, with no company in the middle.',
+  'Reliability':'How trustworthy a piece of evidence is, based on where it came from.',
+  'Confidence':'How much the current evidence agrees with itself — not a guess about price.',
+  'Basis':'The price difference between a futures contract and the spot price.',
+  'Contradiction':'Two pieces of evidence that point in different directions.',
+  'Open Interest (perps)':'The total number of futures contracts currently open.',
+};
+function glossify(text){
+  let out = text;
+  Object.keys(GLOSSARY).sort((a,b)=>b.length-a.length).forEach(term=>{
+    if(out.includes('data-term="'+term+'"')) return;
+    const re = new RegExp('\\b('+term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')\\b','i');
+    out = out.replace(re, `<span class="gterm" data-term="${term.replace(/"/g,'&quot;')}">$1</span>`);
+  });
+  return out;
+}
+const glossaryTip = document.getElementById('glossaryTip');
+document.addEventListener('click', (e)=>{
+  const term = e.target.closest && e.target.closest('.gterm');
+  if(term){
+    const def = GLOSSARY[term.dataset.term];
+    if(!def) return;
+    glossaryTip.innerHTML = `<b>${term.dataset.term}</b>${def}`;
+    const r = term.getBoundingClientRect();
+    glossaryTip.style.left = Math.min(r.left, window.innerWidth-250)+'px';
+    glossaryTip.style.top = (r.bottom+8)+'px';
+    glossaryTip.classList.add('show');
+    e.stopPropagation();
+    return;
+  }
+  if(!glossaryTip.contains(e.target)) glossaryTip.classList.remove('show');
+});
+
+/* ---------- Plain-language translators for scores, confidence, reliability ---------- */
+function confidencePhrase(val){
+  if(val>=75) return 'High Confidence';
+  if(val>=55) return 'Moderate Confidence';
+  if(val>=35) return 'Low Confidence';
+  return 'Very Low Confidence';
+}
+function confidenceNarrative(){
+  return confidence.signalAgreement>=65
+    ? 'Most major evidence categories currently agree.'
+    : 'Several important evidence categories currently disagree.';
+}
+function reliabilityPhrase(val){
+  if(val>=90) return 'Very High Reliability';
+  if(val>=75) return 'High Reliability';
+  if(val>=60) return 'Moderate Reliability';
+  return 'Low Reliability';
+}
+
+/* ---------- Story Engine — Tell Me / Show Me content for the dashboard header ---------- */
+const StoryEngine = {
+  weather(){
+    if(contradictions.length>=2 || confidence.overall<45) return {emoji:'⛈', label:'High Uncertainty'};
+    if(contradictions.length===1 || confidence.overall<55) return {emoji:'🌧', label:'Caution'};
+    if(fingerprintRegimeLabel==='Balanced / Mixed') return {emoji:'⛅', label:'Mixed'};
+    if(confidence.overall>=70) return {emoji:'☀', label:'Clear'};
+    return {emoji:'🌤', label:'Improving'};
+  },
+  marketStory(){
+    const s1 = contradictions[0] ? contradictions[0].description : `${fingerprintRegimeLabel} conditions persist across today's evidence.`;
+    const s2 = visibilityLayers.divergence>=12
+      ? (visibilityLayers.direction==='institutional-leans-more-constructive'
+          ? 'Institutional positioning currently reads stronger than visible retail sentiment.'
+          : 'Retail sentiment currently reads stronger than institutional positioning.')
+      : 'Retail and institutional evidence are currently reading in broad agreement.';
+    const s3 = `Current evidence suggests ${confidence.overall>=65?'a moderate lean, ':'meaningful disagreement '}beneath the surface, with overall confidence at ${confidence.overall}%.`;
+    return `${s1} ${s2} ${s3}`;
+  },
+  oneThing(){
+    const top = [...EvidenceStore].filter(e=>e.status==='active').sort((a,b)=>b.weight-a.weight)[0];
+    return `${top.signalName} is currently the strongest single piece of evidence (${top.rawValue}, ${top.reliability}% reliable) — this most supports ${top.normalizedValue>=0?'the case for accumulation':'the case for continued caution'} right now.`;
+  },
+  whyToday(){
+    const unusual = [];
+    if(contradictions.length>=2) unusual.push(`${contradictions.length} separate contradictions flagged at once`);
+    if(visibilityLayers.divergence>=12) unusual.push(`a ${visibilityLayers.divergence}-point retail/institutional gap`);
+    if(!unusual.length) unusual.push('no major contradictions and a fairly typical evidence spread');
+    return `Today's combination of ${unusual.join(' and ')} is ${unusual.length>=2?'relatively uncommon':'fairly ordinary'}. This doesn't predict price direction, but it makes today's evidence ${unusual.length>=2?'more interesting than usual':'about as noteworthy as an average day'}.`;
+  },
+  render(){
+    const w = this.weather();
+    document.getElementById('marketStoryCard').innerHTML = `
+      <div class="story-card">
+        <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>Today's Market Story</h2>
+        <p>${glossify(this.marketStory())}</p>
+      </div>`;
+    document.getElementById('oneThingCard').innerHTML = `
+      <div class="one-thing-card">
+        <span class="otc-label">If you only read one thing today</span>
+        <p>${glossify(this.oneThing())}</p>
+      </div>`;
+    document.getElementById('weatherCard').innerHTML = `
+      <h2 style="margin-bottom:10px;">Market Weather</h2>
+      <div class="weather-pill"><span class="wemoji">${w.emoji}</span><span class="wlabel">${w.label}</span></div>
+      <p style="font-size:11.5px;color:var(--text-2);margin:0;">This is not a prediction — it's today's evidence translated into plain language.</p>`;
+    document.getElementById('whyTodayCard').innerHTML = `
+      <h2 style="margin-bottom:10px;">Why Today Matters</h2>
+      <p style="font-size:12.5px;color:var(--text-1);">${glossify(this.whyToday())}</p>`;
+  }
+};
+
 /* ---------- Notification Center ---------- */
 const NotificationCenter = {
   items: [
@@ -1430,7 +1599,7 @@ function buildWidgetModules(){
   const liqFlowConf = Math.round(liqFlowEvs.reduce((s,e)=>s+e.weight,0)/liqFlowEvs.length);
   const liqFlowRel = Math.round(liqFlowEvs.reduce((s,e)=>s+e.reliability,0)/liqFlowEvs.length);
 
-  return [
+  const base = [
     {
       id:'institutional-radar', title:'Institutional Radar', tone: fp.institutionBehaviour.trend==='down'?'warn':'good',
       desc:'Positioning inferred from whale flow, reserve trend, and ETF flow where connected.',
@@ -1541,6 +1710,86 @@ function buildWidgetModules(){
       connector:'Directly Observable · Institutionally Observable (CME, ETF) · Inferred / Opaque (OTC gap)'
     },
   ];
+
+  /* Tell Me / Show Me / Since Yesterday — plain-language layer over the same computed values above.
+     Nothing here recomputes a score; it only translates what already exists. */
+  const meta = {
+    'institutional-radar': {
+      question:'What are institutions probably doing?',
+      tellMe: fp.institutionBehaviour.score>=60 ? 'Institutions appear to be quietly accumulating.'
+        : fp.institutionBehaviour.score<=40 ? 'Current evidence suggests institutions are reducing exposure.'
+        : 'Institutional positioning currently looks mixed, with no clear lean.',
+      statusLabel: fp.institutionBehaviour.score>=60?'Accumulating':fp.institutionBehaviour.score<=40?'Distributing':'Mixed',
+      statusTone: fp.institutionBehaviour.score>=60?'good':fp.institutionBehaviour.score<=40?'bad':'warn',
+      sinceYesterday:{ direction: fp.institutionBehaviour.trend,
+        why: fp.institutionBehaviour.trend==='up' ? 'Whale accumulation and ETF inflow strengthened.' : fp.institutionBehaviour.trend==='down' ? 'Institutional-layer evidence softened.' : 'No material change in institutional-layer evidence.' }
+    },
+    'exchange-health': {
+      question:'Are exchanges becoming stronger or weaker?',
+      tellMe: exHealthScore>=60 ? 'Exchange conditions remain healthy.' : exHealthScore<45 ? 'Exchange liquidity is weakening.' : 'Exchange conditions are steady — neither strong nor weak.',
+      statusLabel: exHealthScore>=60?'Healthy':exHealthScore<45?'Weakening':'Steady',
+      statusTone: exHealthScore>=60?'good':exHealthScore<45?'bad':'warn',
+      sinceYesterday:{ direction: reservesEv.trend,
+        why: reservesEv.trend==='down' ? 'Exchange Reserves outflow continued.' : reservesEv.trend==='up' ? 'Exchange Reserves began refilling.' : 'Exchange Reserves held steady.' }
+    },
+    'whale-activity': {
+      question:'What are whales doing?',
+      tellMe: whaleEv.normalizedValue>=0 ? 'Large wallets continue accumulating.' : 'Large wallets are net distributing.',
+      statusLabel: whaleEv.normalizedValue>=0?'Accumulating':'Distributing',
+      statusTone: whaleEv.normalizedValue>=0?'good':'bad',
+      sinceYesterday:{ direction: whaleEv.trend,
+        why: whaleEv.trend==='up' ? 'Net accumulating wallets increased.' : whaleEv.trend==='down' ? 'Accumulation pace slowed.' : 'No material change in whale flow.' }
+    },
+    'market-fingerprint': {
+      question:'Is the market leaning toward buyers or sellers overall?',
+      tellMe: fingerprintRegimeLabel==='Accumulation-leaning' ? "Today's market leans toward accumulation."
+        : fingerprintRegimeLabel==='Distribution-leaning' ? "Today's market leans toward distribution."
+        : "Today's market remains balanced with no dominant side.",
+      statusLabel: fingerprintRegimeLabel, statusTone: fingerprintRegimeLabel==='Accumulation-leaning'?'good':fingerprintRegimeLabel==='Distribution-leaning'?'bad':'accent',
+      sinceYesterday:{ direction:'flat', why:'This is a same-day composite reading; day-over-day tracking arrives once the platform persists snapshots.' }
+    },
+    'evidence-engine': {
+      question:'What does all available evidence currently suggest?',
+      tellMe:`Current evidence ${confidence.overall>=60?'slightly favours accumulation':'is closely split'}, despite ${contradictions.length? contradictions.length+' active contradiction'+(contradictions.length>1?'s':''):'no active contradictions'}.`,
+      statusLabel: contradictions.length?'Mixed':'Aligned', statusTone: contradictions.length?'warn':'good',
+      sinceYesterday:{ direction: contradictions.length?'down':'up', why: contradictions.length ? 'New contradictions were flagged.' : 'Evidence stayed internally consistent.' }
+    },
+    'ai-summary': {
+      question:'What should I actually take away from all this?',
+      tellMe: EvidenceEngine.summary.split('. ')[0]+'.',
+    },
+    'liquidity-flow': {
+      question:'Is liquidity building or draining?',
+      tellMe: netFlowUsd>=0 ? 'Liquidity is flowing in.' : 'Liquidity is draining out.',
+      statusLabel: netFlowUsd>=0?'Building':'Draining', statusTone: netFlowUsd>=0?'good':'warn',
+      sinceYesterday:{ direction: netFlowUsd>=0?'up':'down', why: netFlowUsd>=0?'Order-book depth improved.':'Order-book depth thinned.' }
+    },
+    'risk-monitor': {
+      question:'How risky is current leverage in the system?',
+      tellMe: fp.risk.score>=60 ? 'Leverage risk is elevated right now.' : fp.risk.score<45 ? 'Leverage risk remains low.' : 'Leverage risk is moderate — worth watching.',
+      statusLabel: riskTierOf(fp.risk.score)+' Risk', statusTone: fp.risk.score>=60?'bad':fp.risk.score>=45?'warn':'good',
+      sinceYesterday:{ direction: fp.risk.trend, why: fp.risk.trend==='up'?'Leverage risk increased.':fp.risk.trend==='down'?'Leverage risk eased.':'Leverage risk held steady.' }
+    },
+    'market-timeline': {
+      question:"What's actually happened recently, in order?",
+      tellMe:`Most recent notable shift: ${timeline[0].label}.`,
+    },
+    'confidence-meter': {
+      question:'How much do we actually know right now?',
+      tellMe:`${confidencePhrase(confidence.overall)} — ${confidenceNarrative()}`,
+      statusLabel: confidencePhrase(confidence.overall),
+      statusTone: confidence.overall>=75?'good':confidence.overall>=55?'accent':confidence.overall>=35?'warn':'bad',
+      sinceYesterday:{ direction:'flat', why:'Composite confidence is a same-day read; trend tracking arrives with persistence.' }
+    },
+    'market-visibility-layer': {
+      question:'Do retail and institutional evidence agree?',
+      tellMe: visibilityLayers.divergence>=12 ? 'Institutional and retail evidence currently disagree.' : 'Retail and institutional evidence are currently aligned.',
+      statusLabel: visibilityLayers.divergence>=12?'Diverging':'Aligned', statusTone: visibilityLayers.divergence>=12?'warn':'good',
+      sinceYesterday:{ direction:'flat', why:'Divergence is a same-day composite; trend tracking arrives with persistence.' }
+    },
+  };
+
+  return base.map(m => Object.assign({}, m, meta[m.id]||{}));
 }
 
 const WidgetRegistry = {
@@ -1554,6 +1803,9 @@ const WidgetRegistry = {
 
   card(m){
     const hasMetric = !m.noMetric;
+    const toneBg = t => t==='accent' ? 'var(--accent-wash)' : `var(--${t}-dim)`;
+    const toneCol = t => `var(--${t})`;
+    const dirArrow = d => d==='up' ? '↑ Improved' : d==='down' ? '↓ Weakened' : '→ Unchanged';
     return `
     <div class="widget ${m.span2?'span-2':''}" data-id="${m.id}">
       <div class="widget-head">
@@ -1572,28 +1824,24 @@ const WidgetRegistry = {
         </div>
       </div>
       <div class="widget-body">
-        ${hasMetric ? `
-        <div class="metric-row">
-          <span class="metric-big">${m.metric}</span>
-          ${m.delta ? `<span class="metric-delta ${m.deltaDir}">${m.delta}</span>` : ''}
-        </div>
-        <span class="widget-desc" style="display:block;margin-bottom:6px;">${m.metricLabel}</span>
-        ${sparkline(m.id.length)}
-        ` : `
-        <div style="padding:14px 0 6px;color:var(--text-2);font-size:12px;display:flex;align-items:center;gap:8px;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
-          ${m.metricLabel}
-        </div>`}
+        <!-- LEVEL 1 — TELL ME -->
+        <p class="tell-me">${glossify(m.tellMe || m.desc)}</p>
+        ${m.question ? `<p class="tell-question">${m.question}</p>` : ''}
+
+        <!-- LEVEL 2 — SHOW ME -->
+        ${m.statusLabel ? `<span class="status-pill" style="color:${toneCol(m.statusTone)};background:${toneBg(m.statusTone)};">${m.statusLabel}</span>` : ''}
+        ${hasMetric ? sparkline(m.id.length) : ''}
         ${m.confidence ? `
-        <div class="ledger">
-          <div class="ledger-row"><span class="ledger-label">Confidence</span><span class="ledger-value">${m.confidence}%</span></div>
-          <div class="ledger-track">${seg5(m.confidence, m.tone==='bad'?'bad':m.tone==='warn'?'warn':'good')}</div>
-        </div>
-        <div class="ledger">
-          <div class="ledger-row"><span class="ledger-label">Reliability</span><span class="ledger-value">${m.reliability}%</span></div>
-          <div class="ledger-track">${seg5(m.reliability,'accent')}</div>
+        <div class="phrase-row"><span>${confidencePhrase(m.confidence)}</span><span class="num">${m.confidence}%</span></div>
+        <div class="phrase-row"><span>${reliabilityPhrase(m.reliability)}</span><span class="num">${m.reliability}%</span></div>
+        ` : ''}
+        <span class="widget-desc" style="display:block;margin:8px 0 2px;">${m.metricLabel}: <b style="color:var(--text-0);">${m.metric}</b>${m.delta?` <span style="color:var(--text-2);">(${m.delta})</span>`:''}</span>
+        ${m.sinceYesterday ? `
+        <div class="since-line">
+          <span class="dir-${m.sinceYesterday.direction}">${dirArrow(m.sinceYesterday.direction)}</span>
+          <span>${m.sinceYesterday.why}</span>
         </div>` : ''}
-        <span class="connector-badge"><span class="pulse"></span>${m.connector}</span>
+        <span class="connector-badge" style="margin-top:9px;"><span class="pulse"></span>${m.connector}</span>
       </div>
       <div class="explain-drawer" data-drawer>
         <div class="explain-inner">
@@ -1601,7 +1849,7 @@ const WidgetRegistry = {
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3.2M12 18.8V22M4.9 4.9l2.3 2.3M16.8 16.8l2.3 2.3M2 12h3.2M18.8 12H22M4.9 19.1l2.3-2.3M16.8 7.2l2.3-2.3"/></svg>
             AI Explanation
           </div>
-          ${m.explain}
+          ${glossify(m.explain)}
         </div>
       </div>
       <div class="widget-foot">
@@ -1646,6 +1894,7 @@ const WidgetRegistry = {
   }
 };
 WidgetRegistry.render();
+StoryEngine.render();
 
 document.getElementById('refreshAll').addEventListener('click', ()=>{
   document.querySelectorAll('.wa-btn[data-action="refresh"]').forEach(b=>{
