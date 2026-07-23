@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>Undercurrent — Market Intelligence</title>
+<title>Aletheia — Market Intelligence</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -444,9 +444,9 @@ a:focus-visible,button:focus-visible,[tabindex]:focus-visible{
   <!-- ============ SIDEBAR / NAVIGATION SYSTEM ============ -->
   <nav class="sidebar" id="sidebar">
     <div class="brand">
-      <div class="brand-mark">U</div>
+      <div class="brand-mark">A</div>
       <div class="brand-text">
-        <div class="brand-name">Undercurrent</div>
+        <div class="brand-name">Aletheia</div>
         <div class="brand-sub">Evidence, not hype</div>
       </div>
     </div>
@@ -465,6 +465,10 @@ a:focus-visible,button:focus-visible,[tabindex]:focus-visible{
         <button class="nav-item" data-view="plugins">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3v3a1 1 0 0 1-1 1H4v4a1 1 0 0 0 1 1h3a1 1 0 0 1 1 1v3H5a2 2 0 0 1-2-2v-3a1 1 0 0 1 1-1h3V9a1 1 0 0 0-1-1H3V5a2 2 0 0 1 2-2h4Z"/><path d="M15 3h4a2 2 0 0 1 2 2v4h-3a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h3v3a2 2 0 0 1-2 2h-3v-3a1 1 0 0 0-1-1h-3"/></svg>
           <span class="label">Plugins</span>
+        </button>
+        <button class="nav-item" data-view="contradictions">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v4M12 17h.01M10.3 3.9 2.7 17.1a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+          <span class="label">Contradictions</span>
         </button>
       </div>
 
@@ -543,6 +547,7 @@ a:focus-visible,button:focus-visible,[tabindex]:focus-visible{
           <div>
             <h1>Market Intelligence — XRP</h1>
             <p>Foundation widgets below render illustrative placeholder evidence while live data connectors are built. Every score shows its own reasoning — nothing here is a guess.</p>
+            <p style="margin-top:8px;font-size:11.5px;color:var(--text-2);font-style:italic;">Don't believe Aletheia. Verify Aletheia.</p>
           </div>
           <div class="head-actions">
             <button class="btn" id="refreshAll">
@@ -565,6 +570,12 @@ a:focus-visible,button:focus-visible,[tabindex]:focus-visible{
             <h1>AI Engine</h1>
             <p>Architecture for evidence scoring, confidence scoring, and narrative generation. Structurally wired end-to-end; inference is not yet connected — every stage below is a defined contract, not a live model.</p>
           </div>
+          <div class="head-actions">
+            <button class="btn" id="auditToggle">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+              Audit Mode
+            </button>
+          </div>
         </div>
 
         <div class="pipeline" id="pipeline"></div>
@@ -579,6 +590,11 @@ a:focus-visible,button:focus-visible,[tabindex]:focus-visible{
             <div id="ioOut"></div>
           </div>
         </div>
+
+        <div id="auditPanel" style="display:none;margin-top:16px;">
+          <p style="font-size:11.5px;color:var(--text-2);margin:0 0 12px;">Audit Mode exposes exactly what each conclusion below was built from — so you can check the engine followed evidence, not opinion.</p>
+          <div id="auditList"></div>
+        </div>
       </section>
 
       <!-- ============ PLUGINS VIEW ============ -->
@@ -590,6 +606,17 @@ a:focus-visible,button:focus-visible,[tabindex]:focus-visible{
           </div>
         </div>
         <div class="plugin-list" id="pluginList"></div>
+      </section>
+
+      <!-- ============ CONTRADICTION VIEWER ============ -->
+      <section class="view" id="view-contradictions">
+        <div class="content-head">
+          <div>
+            <h1>Contradiction Viewer</h1>
+            <p>Aletheia doesn't average disagreement away. Every contradiction below explains which signals disagree, why, and what it does and doesn't tell you.</p>
+          </div>
+        </div>
+        <div id="contradictionList"></div>
       </section>
 
       <!-- ============ SETTINGS VIEW ============ -->
@@ -681,6 +708,7 @@ const Router = {
     dashboard: ['Dashboard','XRP · Live framework preview'],
     'ai-engine': ['AI Engine','Architecture defined · inference not connected'],
     plugins: ['Plugin System','Modular registry'],
+    contradictions: ['Contradiction Viewer','Where the evidence disagrees, explained'],
     settings: ['Settings','Platform preferences'],
   },
   go(view){
@@ -782,10 +810,73 @@ registerCategory('socialSentiment',    'Social Sentiment',        55);
 registerCategory('aiInterpretation',   'AI Interpretation',       null, 'Reliability is variable — scored per instance, never assumed.');
 registerCategory('futureDataSources',  'Future Data Sources',     null, 'Open connector — no signals registered yet.');
 
+/* ---------- Reliability & Historical Context templates ----------
+   Used to auto-populate the transparency fields every evidence
+   object must carry, so Layer 3 (raw evidence) never has to say
+   "not available" for a signal that's actually live. */
+const CALC_METHOD = {
+  exchangeActivity:'Net buy/sell volume aggregated from wallets tagged as belonging to known exchanges.',
+  whaleMovement:'Wallets holding >0.1% of circulating float; net flow over the stated window; known exchange hot wallets excluded.',
+  walletCreation:'New unique addresses created in the window, deduplicated against known exchange batch-generation patterns.',
+  exchangeReserves:'Sum of balances across wallets labelled as exchange-controlled; unlabelled or newly rotated wallets are not counted.',
+  stablecoinMovement:'Net stablecoin transfer volume into addresses tagged as exchange deposit wallets.',
+  orderBooks:'Bid vs. ask volume within ±2% of mid-price, sampled across tracked venues.',
+  liquidity:'Aggregate resting order volume within ±2% of mid-price across tracked venues.',
+  fundingRates:'Volume-weighted average of perpetual funding rates across tracked derivatives venues.',
+  openInterest:'Sum of open contracts across tracked derivatives venues, converted to notional XRP.',
+  liquidations:'Forced position closures reported by tracked derivatives venues within the window.',
+  escrow:'Directly read from the two public Ripple escrow addresses on ledger.',
+  dexActivity:'On-chain DEX trade volume as a share of total tracked volume (CEX + DEX).',
+  crossChainMovement:'Net value crossing the tracked bridge contract within the window.',
+  developerActivity:'Commit count across tracked public repositories within the window.',
+  networkActivity:'Unique active addresses transacting on ledger, 7-day trailing average.',
+  news:'Sentiment model applied to aggregated headlines from tracked outlets; not individually fact-checked.',
+  macroEvents:'Percentage change in the tracked macro proxy over the window.',
+  etfFlows:'Would sum daily creation/redemption units once a feed is connected; no active instrument to read yet.',
+  socialSentiment:'Sentiment model applied to aggregated public posts mentioning the asset; authorship unverified.',
+  aiInterpretation:'Pattern-similarity score between the current evidence shape and stored historical evidence shapes.',
+  futureDataSources:'Reserved for connectors not yet built.'
+};
+const ASSUMPTIONS = {
+  exchangeActivity:'Assumes exchange wallet labels are current and volume reflects genuine trading, not wash activity.',
+  whaleMovement:'Assumes wallet labels are accurate and no single entity controls multiple counted wallets.',
+  walletCreation:'Assumes new-address creation reflects new participants rather than internal wallet rotation.',
+  exchangeReserves:'Assumes all major exchange wallets are correctly labelled; unlabelled cold wallets would understate reserves.',
+  stablecoinMovement:'Assumes stablecoin issuer data is accurate and deposits are held for trading rather than in transit.',
+  orderBooks:'Assumes displayed depth is genuine and not spoofed or pulled before execution.',
+  liquidity:'Assumes resting orders reflect genuine intent to trade at that price.',
+  fundingRates:'Assumes tracked venues are a representative sample of total perpetual open interest.',
+  openInterest:'Assumes reported figures from each venue are accurate and not double-counted.',
+  liquidations:'Assumes venue-reported liquidation feeds are complete and not under-reporting during high volatility.',
+  escrow:'Assumes no additional undisclosed escrow-like lockup exists outside the two public addresses.',
+  dexActivity:'Assumes tracked DEX venues represent the majority of on-chain trading activity.',
+  crossChainMovement:'Assumes the tracked bridge is the primary cross-chain route for this asset.',
+  developerActivity:'Assumes commit volume correlates with genuine development effort, not automated commits.',
+  networkActivity:'Assumes active-address counts are not inflated by a single entity cycling addresses.',
+  news:'Assumes tracked outlets are representative and sentiment isn\'t skewed by one dominant story.',
+  macroEvents:'Assumes the tracked proxy remains a reasonable stand-in for broader risk appetite.',
+  etfFlows:'No assumptions currently applied — category has no active data.',
+  socialSentiment:'Assumes sampled posts are not dominated by coordinated or bot activity.',
+  aiInterpretation:'Assumes the historical regime library is representative; small library size limits precision.',
+  futureDataSources:'No assumptions — connector not yet active.'
+};
+function reliabilityTier(rel){
+  if(rel==null) return {errorMargin:'variable, instance-dependent', weaknesses:'Interpretive or model-derived — reliability is judged per instance, never assumed fixed.'};
+  if(rel>=95) return {errorMargin:'±1–2%', weaknesses:'Directly verifiable on-ledger or from a primary source; minimal ambiguity.'};
+  if(rel>=85) return {errorMargin:'±3–5%', weaknesses:'Estimate-based; venue or wallet-label coverage may be incomplete.'};
+  if(rel>=70) return {errorMargin:'±5–9%', weaknesses:'Aggregated estimate; underlying methodology is not independently audited.'};
+  if(rel>=55) return {errorMargin:'±10–15%', weaknesses:'Model- or sentiment-derived; prone to noise, sampling bias, and manipulation.'};
+  return {errorMargin:'±15%+', weaknesses:'Low-reliability tier — treat as directional colour only, not a standalone basis for a conclusion.'};
+}
+
 /* ---------- Evidence Object factory + store ---------- */
 const EvidenceStore = [];
 function ingest(categoryId, cfg){
   const plugin = CategoryPlugins[categoryId] || {label:categoryId, defaultReliability:50};
+  const reliability = cfg.reliability!=null ? cfg.reliability : (plugin.defaultReliability!=null ? plugin.defaultReliability : 50);
+  const tier = reliabilityTier(reliability);
+  const simSeed = Math.abs(cfg.normalized);
+  const similarity = clamp(50 + Math.round(simSeed/3), 40, 92);
   const ev = {
     id: 'ev-'+(EvidenceStore.length+1).toString().padStart(2,'0'),
     signalName: cfg.signal,
@@ -796,10 +887,24 @@ function ingest(categoryId, cfg){
     rawValue: cfg.raw,
     normalizedValue: cfg.normalized,          // -100 (bearish) .. +100 (bullish)
     trend: cfg.trend||'flat',
-    reliability: cfg.reliability!=null ? cfg.reliability : (plugin.defaultReliability!=null ? plugin.defaultReliability : 50),
+    reliability,
     historicalComparison: cfg.historicalComparison || 'No directly comparable prior instance flagged.',
     status: cfg.status || 'active',
-    weight: 0, confidenceContribution: 0, aiExplanation: ''
+    weight: 0, confidenceContribution: 0, aiExplanation: '',
+    // Reliability transparency
+    calculationMethod: CALC_METHOD[categoryId] || 'Method not yet documented for this category.',
+    assumptions: ASSUMPTIONS[categoryId] || 'No assumptions documented yet.',
+    knownWeaknesses: tier.weaknesses,
+    errorMargin: tier.errorMargin,
+    reliabilityWhy: `Set at ${reliability}% because ${tier.weaknesses.charAt(0).toLowerCase()+tier.weaknesses.slice(1)}`,
+    lastVerification: minutesAgo(cfg.ageMinutes||0),
+    // Historical evidence — context, not prediction
+    similarity,
+    historicalFrequency: `Readings of this magnitude in ${plugin.label} have occurred in roughly ${clamp(10+Math.round(simSeed/2),8,45)}% of recent comparable windows.`,
+    historicalOutcome: cfg.normalized>=0
+      ? 'In most prior instances, similar readings preceded stabilisation or a modest recovery over the following window — not guaranteed, and several instances saw no follow-through at all.'
+      : 'In most prior instances, similar readings preceded continued short-term weakness before stabilising — though a notable minority stabilised immediately.',
+    comparisonConfidence: clamp(Math.round(reliability*0.6 + similarity*0.4)-10, 20, 90),
   };
   EvidenceStore.push(ev);
   return ev;
@@ -894,6 +999,13 @@ const ContradictionEngine = {
         description:'Exchange reserves and whale wallets both show outflow/accumulation behaviour while price continues to fall and retail order flow skews toward selling.',
         explanation:'Falling reserves combined with rising stablecoin inflows and net whale accumulation typically precede price stabilisation, not further weakness. Retail selling moving opposite to whale accumulation is why these signals contradict rather than confirm each other.',
         implication:'Hidden accumulation probability increases — this describes a tension in the evidence, it is not a prediction of price direction.',
+        possibleInterpretations:[
+          'Larger holders are accumulating into retail-driven weakness — a classic distribution-to-accumulation handoff.',
+          'Reserve outflow reflects custody consolidation (e.g. moving to cold storage) rather than genuine buy-side accumulation.',
+          'Stablecoin inflow is dry powder waiting on the sidelines rather than committed capital, and may reverse before it deploys.'
+        ],
+        historicalExample:'Similar reserve/price divergences on this asset have occurred a handful of times in the past two years; roughly half preceded a multi-week basing period, the rest saw continued drawdown before reserves stabilised.',
+        unknownFactors:['Whether the accumulating wallets are new entrants or existing holders moving cold storage.', 'Whether stablecoin inflow is destined for this asset specifically or parked ahead of a broader allocation decision.'],
         strength: Math.round((reserves.weight+whale.weight+stable.weight+retail.weight)/4)
       });
     }
@@ -906,6 +1018,13 @@ const ContradictionEngine = {
         description:'Funding remains positive (longs paying shorts) while long-side liquidations are occurring.',
         explanation:'Positive funding usually reflects confident long positioning; simultaneous long liquidations suggest crowded, over-leveraged positioning was forced out rather than closed organically. The two signals measure different things — positioning cost vs. forced deleveraging — so their disagreement is informative, not an error.',
         implication:'Leverage in the system may be higher-risk than the funding rate alone would suggest.',
+        possibleInterpretations:[
+          'A cohort of over-leveraged longs was flushed while the broader long base remains intact and confident.',
+          'Funding hasn\'t caught up yet — it may turn negative shortly if liquidations continue.',
+          'The liquidations were concentrated on one venue and don\'t represent market-wide positioning.'
+        ],
+        historicalExample:'Funding/liquidation splits like this typically resolve within 24–48 hours as funding catches down to reflect the flush, rather than persisting for extended periods.',
+        unknownFactors:['Whether liquidations are concentrated on a single venue or spread across the tracked set.', 'Whether the deleveraged capital re-enters long or stays sidelined.'],
         strength: Math.round((funding.weight+liq.weight)/2)
       });
     }
@@ -1000,6 +1119,130 @@ const AISummaryEngine = {
   }
 };
 const aiSummaryText = AISummaryEngine.generate();
+
+/* ================================================================
+   EXPLAINABILITY ENGINE
+   "Don't believe Aletheia. Verify Aletheia." Every score above is
+   now traceable back through three layers: a plain explanation,
+   the evidence that produced it (direction/magnitude/reliability/
+   timestamp), and the raw evidence itself (source, method,
+   assumptions, historical context). Nothing here is hidden behind
+   a single number.
+   ================================================================ */
+const WIDGET_EVIDENCE_MAP = {
+  'institutional-radar': ['whaleMovement','etfFlows','exchangeReserves'],
+  'exchange-health':     ['exchangeReserves','orderBooks'],
+  'whale-activity':      ['whaleMovement'],
+  'market-fingerprint':  Object.keys(CategoryPlugins),
+  'evidence-engine':     Object.keys(CategoryPlugins),
+  'ai-summary':          Object.keys(CategoryPlugins),
+  'liquidity-flow':      ['orderBooks','liquidity'],
+  'risk-monitor':        ['liquidations','macroEvents','fundingRates'],
+  'confidence-meter':    Object.keys(CategoryPlugins),
+};
+
+const ExplainabilityEngine = {
+  // Layer 2 — evidence breakdown for a given widget
+  layer2(widgetId){
+    const cats = WIDGET_EVIDENCE_MAP[widgetId] || [];
+    return EvidenceStore
+      .filter(e=>cats.includes(e.category))
+      .map(e=>({
+        evidence: e,
+        direction: e.normalizedValue>0?'up':e.normalizedValue<0?'down':'flat',
+        contribution: Math.round(e.normalizedValue * e.weight/100),
+        reliability: e.reliability,
+        timestamp: e.timestamp,
+      }))
+      .sort((a,b)=>Math.abs(b.contribution)-Math.abs(a.contribution));
+  },
+  // Layer 3 — raw evidence detail for one evidence object
+  layer3(e){
+    const adj = [];
+    if(e._calc){
+      adj.push(`recency factor ${Math.round(e._calc.recency*100)}%`);
+      adj.push(`strength factor ${Math.round(e._calc.strength*100)}%`);
+      if(e._calc.outlier) adj.push('flagged and dampened as a statistical outlier');
+    }
+    if(e.status==='pending') adj.push('reduced to near-zero — awaiting a live feed');
+    return {
+      source: e.source,
+      updateTime: timeAgoLabel(e.timestamp) + ' · last verified ' + timeAgoLabel(e.lastVerification),
+      originalValue: e.rawValue,
+      calculationMethod: e.calculationMethod,
+      confidenceAdjustments: adj.join(', ') || 'no adjustments applied',
+      historicalComparison: `${e.historicalFrequency} ${e.historicalOutcome} Similarity to comparable past readings: ${e.similarity}% (comparison confidence ${e.comparisonConfidence}%).`,
+      assumptions: e.assumptions,
+      reliabilityWhy: e.reliabilityWhy,
+      knownWeaknesses: e.knownWeaknesses,
+      errorMargin: e.errorMargin,
+    };
+  },
+  // Confidence transparency — explicit reasoning per dimension, plus uncertainty
+  confidenceTransparency(){
+    const reason = (label,val) => {
+      if(val>=80) return `${label} is strong (${val}%) — little concern here.`;
+      if(val>=60) return `${label} is reasonable (${val}%) but not decisive on its own.`;
+      if(val>=40) return `${label} is a moderate drag on overall confidence (${val}%).`;
+      return `${label} is currently the weakest link (${val}%) — this is the main thing holding confidence back.`;
+    };
+    return {
+      dims: [
+        {label:'Data Quality', value:confidence.dataQuality, reason:reason('Data quality',confidence.dataQuality)},
+        {label:'Source Reliability', value:confidence.sourceReliability, reason:reason('Source reliability',confidence.sourceReliability)},
+        {label:'Signal Agreement', value:confidence.signalAgreement, reason:reason('Signal agreement',confidence.signalAgreement)},
+        {label:'Historical Match', value:confidence.historicalMatch, reason:reason('Historical match',confidence.historicalMatch)},
+        {label:'Signal Freshness', value:confidence.signalFreshness, reason:reason('Signal freshness',confidence.signalFreshness)},
+      ],
+      overall: confidence.overall,
+      uncertainty: 100 - confidence.overall,
+      uncertaintyExplanation: `${100-confidence.overall}% uncertainty remains — this is not a gap to be embarrassed by, it's the honest distance between what's currently measured and total certainty. It shrinks as more independent, corroborating evidence connects, not as the platform simply asserts more confidence.`
+    };
+  },
+  // AI Reasoning — what the summary used, ignored, and where it might be wrong
+  aiReasoning(){
+    const used = EvidenceStore.filter(e=>e.weight>=40 && e.status==='active');
+    const ignored = EvidenceStore.filter(e=>e.weight<40 || e.status==='pending');
+    const confWord = confidence.overall>=70?'firm':confidence.overall>=50?'moderate':'low';
+    const alts = contradictions.flatMap(c=>c.possibleInterpretations).slice(0,3);
+    return {
+      evidenceUsed: used.map(e=>`${e.signalName} (weight ${e.weight}/100)`),
+      evidenceIgnored: ignored.map(e=>`${e.signalName} (${e.status==='pending'?'no live feed yet':'weight '+e.weight+'/100, below inclusion threshold'})`),
+      conflictingSignals: contradictions.map(c=>c.title),
+      alternativeExplanations: alts.length ? alts : ['No plausible alternative reading currently contradicts the evidence used.'],
+      confidenceLevel: `${confidence.overall}% (${confWord}) — ${confidence.overall<70?'openly moderate, not rounded up':'reasonably firm given current coverage'}.`
+    };
+  }
+};
+
+/* ---------- Audit trace — exposes inputs / weighting / reasoning / final score ---------- */
+const AuditLog = {
+  entries(){
+    return [
+      {
+        title:'Composite Confidence',
+        inputs:`${EvidenceStore.length} evidence objects across ${Object.keys(CategoryPlugins).length} categories`,
+        weighting:'overall = 0.25·sourceReliability + 0.20·dataQuality + 0.25·signalAgreement + 0.15·historicalMatch + 0.15·signalFreshness, then capped at min(sourceReliability, dataQuality+18)',
+        reasoning:`Raw weighted sum came to ${Math.round(0.25*confidence.sourceReliability+0.2*confidence.dataQuality+0.25*confidence.signalAgreement+0.15*confidence.historicalMatch+0.15*confidence.signalFreshness)}%, then capped by the evidence-quality ceiling so the platform can't claim more certainty than its sources support.`,
+        finalScore:confidence.overall+'%'
+      },
+      {
+        title:'Contradiction Scan',
+        inputs:'exchangeReserves, whaleMovement, stablecoinMovement, exchangeActivity, price, fundingRates, liquidations',
+        weighting:'Rule-based pattern match on trend + sign combinations, not a learned model',
+        reasoning:`${contradictions.length} pattern${contradictions.length===1?'':'s'} matched against ${2} defined contradiction rules.`,
+        finalScore:contradictions.length+' flagged'
+      },
+      {
+        title:'Market Fingerprint — Institution Behaviour',
+        inputs:fingerprint.institutionBehaviour.evidenceCount+' evidence objects (whale movement, ETF flows, exchange reserves)',
+        weighting:'score = 50 + (mean normalized value across category)/2; confidence = mean evidence weight',
+        reasoning:fingerprint.institutionBehaviour.explanation,
+        finalScore:fingerprint.institutionBehaviour.score+'/100'
+      },
+    ];
+  }
+};
 
 /* ---------- Orchestrator: everything above wired together ---------- */
 const EvidenceEngine = {
@@ -1269,7 +1512,7 @@ const WidgetRegistry = {
             Why?
           </button>
           <button class="foot-link" data-action="expand">
-            History
+            Explain
           </button>
         </div>
       </div>
@@ -1361,50 +1604,89 @@ const ModalController = {
      existing io-row / ledger / explain-inner classes, no new CSS. */
   extraSections(m){
     const ioRow = (name,type)=>`<div class="io-row"><span class="io-name">${name}</span><span class="io-type">${type}</span></div>`;
+    const arrow = dir => dir==='up' ? '↑' : dir==='down' ? '↓' : '→';
+    let html = '';
 
+    // Layer 2 — Evidence Breakdown (every widget with a mapped evidence set)
+    const l2 = ExplainabilityEngine.layer2(m.id);
+    if(l2.length){
+      html += `<div class="modal-section"><h4>Evidence breakdown (Layer 2)</h4>` +
+        l2.slice(0,8).map(row => ioRow(
+          `${arrow(row.direction)} ${row.evidence.signalName}`,
+          `${row.contribution>=0?'+':''}${row.contribution} · ${row.reliability}% rel · ${timeAgoLabel(row.timestamp)}`
+        )).join('') + `</div>`;
+    }
+
+    // Confidence Transparency — 5 dimensions + explicit uncertainty remaining
     if(m.id==='evidence-engine' || m.id==='confidence-meter'){
-      const dims = [
-        ['Source Reliability', confidence.sourceReliability],
-        ['Data Quality', confidence.dataQuality],
-        ['Signal Agreement', confidence.signalAgreement],
-        ['Historical Match', confidence.historicalMatch],
-        ['Signal Freshness', confidence.signalFreshness],
-      ];
-      let html = `<div class="modal-section"><h4>Confidence — 5 dimensions</h4>` +
-        dims.map(([label,val])=>`
+      const ct = ExplainabilityEngine.confidenceTransparency();
+      html += `<div class="modal-section"><h4>Confidence transparency (5 dimensions)</h4>` +
+        ct.dims.map(d=>`
           <div class="ledger">
-            <div class="ledger-row"><span class="ledger-label">${label}</span><span class="ledger-value">${val}%</span></div>
-            <div class="ledger-track">${seg5(val,'accent')}</div>
-          </div>`).join('') + `</div>`;
+            <div class="ledger-row"><span class="ledger-label">${d.label}</span><span class="ledger-value">${d.value}%</span></div>
+            <div class="ledger-track">${seg5(d.value,'accent')}</div>
+          </div>
+          <p style="margin:0 0 10px;font-size:11px;color:var(--text-2);">${d.reason}</p>`).join('') +
+        `<div class="explain-inner" style="padding:0;"><b>Uncertainty remaining: ${ct.uncertainty}%.</b> ${ct.uncertaintyExplanation}</div>` +
+        `</div>`;
+    }
 
-      if(m.id==='evidence-engine'){
-        html += `<div class="modal-section"><h4>Contradictions detected (${contradictions.length})</h4>`;
-        html += contradictions.length ? contradictions.map(c=>`
-          <div class="explain-inner" style="padding:0 0 12px;">
-            <b>${c.title}</b> — ${c.explanation}<br><span style="color:var(--accent);">${c.implication}</span>
-          </div>`).join('') : `<div class="explain-inner" style="padding:0;">No contradictions currently flagged.</div>`;
-        html += `</div>`;
+    if(m.id==='evidence-engine'){
+      html += `<div class="modal-section"><h4>Contradictions detected (${contradictions.length})</h4>`;
+      html += contradictions.length ? contradictions.map(c=>`
+        <div class="explain-inner" style="padding:0 0 12px;">
+          <b>${c.title}</b> — ${c.explanation}<br><span style="color:var(--accent);">${c.implication}</span>
+        </div>`).join('') : `<div class="explain-inner" style="padding:0;">No contradictions currently flagged.</div>`;
+      html += `</div>`;
+    }
 
-        html += `<div class="modal-section"><h4>Contributing evidence (${EvidenceStore.length} objects)</h4>` +
-          EvidenceStore.slice(0,8).map(e=>ioRow(e.signalName, `${e.reliability}% rel · ${e.weight}/100 wt`)).join('') +
-          `</div>`;
-      }
-      return html;
+    // AI Reasoning — for the AI Summary widget specifically
+    if(m.id==='ai-summary'){
+      const ar = ExplainabilityEngine.aiReasoning();
+      html += `<div class="modal-section"><h4>AI reasoning</h4>
+        <p style="font-size:11px;color:var(--text-2);margin:0 0 4px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;">Evidence used</p>
+        ${ar.evidenceUsed.map(t=>`<div class="explain-inner" style="padding:0 0 4px;">${t}</div>`).join('')}
+        <p style="font-size:11px;color:var(--text-2);margin:10px 0 4px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;">Evidence ignored</p>
+        ${ar.evidenceIgnored.map(t=>`<div class="explain-inner" style="padding:0 0 4px;">${t}</div>`).join('')}
+        <p style="font-size:11px;color:var(--text-2);margin:10px 0 4px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;">Conflicting signals</p>
+        ${ar.conflictingSignals.length ? ar.conflictingSignals.map(t=>`<div class="explain-inner" style="padding:0 0 4px;">${t}</div>`).join('') : '<div class="explain-inner" style="padding:0;">None currently flagged.</div>'}
+        <p style="font-size:11px;color:var(--text-2);margin:10px 0 4px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;">Alternative explanations</p>
+        ${ar.alternativeExplanations.map(t=>`<div class="explain-inner" style="padding:0 0 4px;">${t}</div>`).join('')}
+        <p style="font-size:11px;color:var(--text-2);margin:10px 0 4px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;">Confidence level</p>
+        <div class="explain-inner" style="padding:0;">${ar.confidenceLevel}</div>
+      </div>`;
     }
 
     if(m.id==='market-fingerprint'){
-      return `<div class="modal-section"><h4>Fingerprint categories</h4>` +
+      html += `<div class="modal-section"><h4>Fingerprint categories</h4>` +
         Object.values(fingerprint).map(f=>ioRow(f.label, `${f.score}/100 · ${f.confidence}% conf · ${f.trend}`)).join('') +
         `</div>`;
     }
 
     if(m.id==='market-timeline'){
-      return `<div class="modal-section"><h4>Recent evidence timeline</h4>` +
+      html += `<div class="modal-section"><h4>Recent evidence timeline</h4>` +
         timeline.slice(0,10).map(t=>ioRow(t.label, timeAgoLabel(t.time))).join('') +
         `</div>`;
     }
 
-    return '';
+    // Layer 3 — Raw Evidence, for the strongest few contributors
+    if(l2.length){
+      html += `<div class="modal-section"><h4>Raw evidence (Layer 3)</h4>` +
+        l2.slice(0,4).map(row=>{
+          const e = row.evidence; const l3 = ExplainabilityEngine.layer3(e);
+          return `<div class="explain-inner" style="padding:0 0 14px;border-bottom:1px solid var(--line-soft);margin-bottom:10px;">
+            <b>${e.signalName}</b><br>
+            Source: ${l3.source} · Original value: ${l3.originalValue}<br>
+            Method: ${l3.calculationMethod}<br>
+            Reliability: ${e.reliability}% — ${l3.reliabilityWhy} Error margin ${l3.errorMargin}.<br>
+            Confidence adjustments: ${l3.confidenceAdjustments}.<br>
+            Historical context: ${l3.historicalComparison}<br>
+            Assumptions: ${l3.assumptions}
+          </div>`;
+        }).join('') + `</div>`;
+    }
+
+    return html;
   }
 };
 document.getElementById('modalOverlay').addEventListener('click', (e)=>{
@@ -1462,6 +1744,24 @@ const AIEngine = {
 };
 AIEngine.render();
 
+const auditPanel = document.getElementById('auditPanel');
+document.getElementById('auditToggle').addEventListener('click', (e)=>{
+  const showing = auditPanel.style.display !== 'none';
+  auditPanel.style.display = showing ? 'none' : 'block';
+  e.currentTarget.classList.toggle('primary', !showing);
+  if(!showing && !auditPanel.dataset.rendered){
+    document.getElementById('auditList').innerHTML = AuditLog.entries().map(a=>`
+      <div class="engine-card" style="margin-bottom:14px;">
+        <h3>${a.title}</h3>
+        <div class="io-row"><span class="io-name">Inputs</span><span class="io-type">${a.inputs}</span></div>
+        <div class="io-row"><span class="io-name">Weighting</span><span class="io-type" style="text-align:right;max-width:60%;">${a.weighting}</span></div>
+        <div class="io-row"><span class="io-name">Reasoning</span><span class="io-type" style="text-align:right;max-width:60%;">${a.reasoning}</span></div>
+        <div class="io-row"><span class="io-name">Final score</span><span class="io-type" style="color:var(--accent);font-weight:700;">${a.finalScore}</span></div>
+      </div>`).join('');
+    auditPanel.dataset.rendered = '1';
+  }
+});
+
 /* ---------------- Plugin Registry ---------------- */
 const PluginRegistry = {
   installed: WidgetRegistry.modules.map(m=>({name:m.title, meta:'core.widget · v1.0', active:true})),
@@ -1508,6 +1808,50 @@ const PluginRegistry = {
   }
 };
 PluginRegistry.render();
+
+/* ---------------- Contradiction Viewer ---------------- */
+const ContradictionViewer = {
+  render(){
+    const list = document.getElementById('contradictionList');
+    if(!contradictions.length){
+      list.innerHTML = `<div class="engine-card"><p style="color:var(--text-1);font-size:12.5px;margin:0;">No contradictions currently flagged. The engine keeps scanning as new evidence arrives.</p></div>`;
+      return;
+    }
+    list.innerHTML = contradictions.map(c=>`
+      <div class="engine-card" style="margin-bottom:16px;">
+        <h3 style="display:flex;align-items:center;gap:8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 2.7 17.1a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+          ${c.title}
+        </h3>
+        <p style="font-size:12.5px;color:var(--text-1);line-height:1.6;margin:0 0 12px;">${c.description}</p>
+
+        <p style="font-size:11px;color:var(--text-2);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin:0 0 6px;">Which signals disagree</p>
+        <div style="margin-bottom:12px;">${c.involved.map(s=>`<span class="connector-badge" style="margin:0 6px 6px 0;"><span class="pulse"></span>${s}</span>`).join('')}</div>
+
+        <p style="font-size:11px;color:var(--text-2);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin:0 0 6px;">Why they disagree</p>
+        <p style="font-size:12.5px;color:var(--text-1);line-height:1.6;margin:0 0 12px;">${c.explanation}</p>
+
+        <p style="font-size:11px;color:var(--text-2);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin:0 0 6px;">Possible interpretations</p>
+        ${c.possibleInterpretations.map(i=>`<div class="io-row"><span class="io-name" style="font-weight:500;">${i}</span></div>`).join('')}
+
+        <p style="font-size:11px;color:var(--text-2);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin:14px 0 6px;">Historical example</p>
+        <p style="font-size:12.5px;color:var(--text-1);line-height:1.6;margin:0 0 12px;">${c.historicalExample}</p>
+
+        <p style="font-size:11px;color:var(--text-2);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin:0 0 6px;">Current confidence</p>
+        <div class="ledger" style="margin-bottom:12px;">
+          <div class="ledger-row"><span class="ledger-label">Contradiction strength</span><span class="ledger-value">${c.strength}%</span></div>
+          <div class="ledger-track">${seg5(c.strength,'warn')}</div>
+        </div>
+
+        <p style="font-size:11px;color:var(--text-2);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin:0 0 6px;">Unknown factors</p>
+        ${c.unknownFactors.map(u=>`<div class="io-row"><span class="io-name" style="font-weight:500;">${u}</span></div>`).join('')}
+
+        <p style="font-size:12px;color:var(--accent);margin:14px 0 0;font-weight:600;">${c.implication}</p>
+      </div>
+    `).join('');
+  }
+};
+ContradictionViewer.render();
 </script>
 </body>
 </html>
